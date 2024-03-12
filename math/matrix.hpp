@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <ostream>
+#include <cmath>
 
 template<typename T, size_t N, size_t M>
 class Matrix;
@@ -18,6 +19,12 @@ private:
     T data[N * M] = {0};
     size_t to_idx(size_t i, size_t j) const {return i*M + j;};
 public:
+    Matrix() {}
+    Matrix(const T (&init)[N*M]) {
+        for (size_t idx = 0; idx < N*M; idx += 1) {
+            data[idx] = init[idx];
+        }
+    }
     T& operator()(size_t i, size_t j) {
         //Don't need to have T operator()... to do float a = mat(0,0). I guess there is an operator to convert T& to T
         return data[to_idx(i, j)];
@@ -41,6 +48,10 @@ public:
                 (*this)(i, j) *= scalar;
             }
         }
+        return (*this);
+    }
+    Matrix<T, N, M>& operator*=(const Matrix<T, M, M>& rhs) {
+        (*this) = (*this) * rhs;
         return (*this);
     }
     Matrix<T, N, M>& operator/=(T scalar) {
@@ -89,18 +100,6 @@ public:
         return result;
     }
 };
-
-
-
-//Specialization for square matrix
-// template <typename T, size_t N>
-// class Matrix<T, N, N> {
-// public:
-//     Matrix<T, N, N>& operator*=(const Matrix<T, N, N>& rhs);
-// };
-
-
-//Specilization for matrix
 
 
 //External operator
@@ -153,6 +152,19 @@ template <typename T, size_t N, size_t M>
 Matrix<T, N, M> operator/(Matrix<T, N, M> lhs, T scalar) {
     lhs /= scalar;
     return lhs;
+}
+template <typename T>
+Matrix<T, 3, 3> rotation_matrix(const Vector<T, 3>& axis, T theta) {
+    T x = axis(0);
+    T y = axis(1);
+    T z = axis(2);
+    T c = cos(theta);
+    T s = sin(theta);
+    T one = (T)(1);
+    Matrix<T, 3, 3> result({(one - c)*x*x + c  , (one - c)*x*y - s*z, (one - c)*x*z - s*y,
+                            (one - c)*x*y + s*z, (one - c)*y*y + c  , (one - c)*y*z - s*x,
+                            (one - c)*x*z - s*y, (one - c)*y*z + s*z, (one - c)*z*z + c});
+    return result;
 }
 
 #endif
