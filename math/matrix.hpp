@@ -11,8 +11,10 @@ class Matrix;
 template <typename T, size_t N>
 using Vector = Matrix<T, N, 1>;
 
+using Mat2 = Matrix<double, 2, 2>;
 using Mat3 = Matrix<double, 3, 3>;
 using Mat4 = Matrix<double, 4, 4>;
+using Vec2 = Vector<double, 2>;
 using Vec3 = Vector<double, 3>;
 using Vec4 = Vector<double, 4>;
 
@@ -178,6 +180,10 @@ template <typename T, size_t N, size_t M>
 Matrix<T, N, M> operator/(Matrix<T, N, M> lhs, T scalar) {
     lhs /= scalar;
     return lhs;
+}
+template <typename T>
+T det(const Vector<T, 2>& u, const Vector<T, 2>& v) {
+    return u(0)*v(1) - v(0)*u(1);
 }
 
 
