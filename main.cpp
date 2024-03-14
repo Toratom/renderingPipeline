@@ -80,9 +80,9 @@ void post_process_vertices(const std::vector<Vertex>& in_vertices, size_t H, siz
             //The last component stores 1/w_c = -1/z_e i.e. the inverse of the positive depth to the camera (needed for perspective correct interpolation)
             vertex.pos(3) = 1.0/vertex.pos(3);
             //From NDC to window space
-            vertex.pos(0) = 0.5*W*(vertex.pos(0) + 1.0);
-            vertex.pos(1) = 0.5*H*(vertex.pos(1) + 1.0);
-            vertex.pos(2) = 0.5*(vertex.pos(2) + 1.0);
+            vertex.pos(0) = 0.5*W*(vertex.pos(0) + 1.0); //In [0, W]
+            vertex.pos(1) = 0.5*H*(vertex.pos(1) + 1.0); //In [0, H]
+            vertex.pos(2) = 0.5*(vertex.pos(2) + 1.0); //In [0, 1]
         }
 
         //-Convert polygon to triangles fan
@@ -109,7 +109,7 @@ void rasterization(const std::vector<Vertex>& in_vertices, size_t H, size_t W,
                          std::min({floor(triangle[0].pos(1)), floor(triangle[1].pos(1)), floor(triangle[2].pos(1))})});
         Vec2 max_corner({std::max({floor(triangle[0].pos(0)), floor(triangle[1].pos(0)), floor(triangle[2].pos(0))}),
                          std::max({floor(triangle[0].pos(1)), floor(triangle[1].pos(1)), floor(triangle[2].pos(1))})});
-        //Test for every pixel in AABB if belongs to the triangle (clip to the window in theory no need thanks to clipping)
+        //Test for every pixel in AABB if belongs to the triangle (clip to the window, in theory no need thanks to clip)
         for (size_t x = std::max(size_t(min_corner(0)), (size_t)0); x <= std::min(size_t(max_corner(0)), W); x += 1) {
             for (size_t y = std::max(size_t(min_corner(1)), (size_t)0); y <= std::min(size_t(max_corner(1)), H); y += 1) {
                 Vec2 pixel({(double)x, (double)y});
@@ -125,16 +125,18 @@ void rasterization(const std::vector<Vertex>& in_vertices, size_t H, size_t W,
                 bool inside = (weights(0) >= 0) && (weights(1) >= 0) && (weights(2) >= 0);
                 if (!inside) continue;
                 
-                //Perspective correct interpolation of the attributs of the vertices to the pixel
+                //Interpolation using window barycentric coordinate for things a/z_e + b and perspective correct interpolation for everything else
                 weights /= det((triangle[1].pos - triangle[0].pos).pull({0, 1}),
                                (triangle[2].pos - triangle[0].pos).pull({0, 1}));
+                double fragment_z = weights(0)*triangle[0].pos(2)
+                                    + weights(1)*triangle[1].pos(2)
+                                    + weights(2)*triangle[2].pos(2);
                 double fragment_w = weights(0)*triangle[0].pos(3)
                                     + weights(1)*triangle[1].pos(3)
-                                    + weights(2)*triangle[2].pos(3); //Inv depth to the camera can be interpolated with the weights computed in window coordinates    
+                                    + weights(2)*triangle[2].pos(3);
                 Vertex fragment;
-                fragment.pos = (weights(0)*triangle[0].pos(3)*triangle[0].pos
-                              + weights(1)*triangle[1].pos(3)*triangle[1].pos
-                              + weights(2)*triangle[2].pos(3)*triangle[2].pos)/fragment_w;
+                fragment.pos = Vec4({pixel(0), pixel(1), fragment_z, fragment_w});
+                //Other attributs are interpolated using perspective correct interpolation
                 fragment.color = (weights(0)*triangle[0].pos(3)*triangle[0].color
                                 + weights(1)*triangle[1].pos(3)*triangle[1].color
                                 + weights(2)*triangle[2].pos(3)*triangle[2].color)/fragment_w;
@@ -147,8 +149,14 @@ void rasterization(const std::vector<Vertex>& in_vertices, size_t H, size_t W,
     }
 }
 
-//-Fragment shader and sample processing
-//TODO
+//-Fragment shader
+void fragment_shader(std::vector<Vertex>& in_vertices, unsigned int num_squares) {
+    for (Vertex& fragment : in_vertices) {
+        unsigned int square_x = int(num_squares * fragment.uv(0));
+        unsigned int square_y = int(num_squares * fragment.uv(1));
+        fragment.color *= (square_x + square_y)%2;
+    }
+}
 
 
 //---Rendering pipeline
@@ -168,6 +176,7 @@ int main(int argc, char *argv[]) {
     double scale = 1.0; //1.0 no clipping VS 10.0 clipping
     Mat4 model_mat = translation_matrix(Vec3({0.5*scale + 1.0, 0.0, 0.0})) * rotation_matrix(Vec3({0.0, 0.0, 1.0}), 0.0) * scale_matrix(scale);
     Mat4 model_mat_ = translation_matrix(Vec3({0.5*scale + 1.0, 0.0, 0.5*scale})) * rotation_matrix(Vec3({0.0, 0.0, 1.0}), -0.5*M_PI) * scale_matrix(scale);
+    unsigned int num_squares = 10; //Number of squares along one dimension of the checkerboard
     //-Window
     size_t H = 100;
     size_t W = 100;
@@ -181,13 +190,13 @@ int main(int argc, char *argv[]) {
     post_process_vertices(buffer_B, H, W, buffer_A);
     //---Resterization
     rasterization(buffer_A, H, W, buffer_B);
-    //---Fragment shader and sample processing
-    //TODO
+    //---Fragment shader
+    fragment_shader(buffer_B, num_squares);
+    //---Sample processing (writing fragment to image buffer)
 
-
-    // for (const Vertex& vet : buffer_B) {
-    //     std::cout << vet.pos << std::endl;
-    // }
+    for (const Vertex& frag : buffer_B) {
+        std::cout << frag.color << std::endl;
+    }
     std::cout << buffer_B.size() << std::endl;
     
 }
