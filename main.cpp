@@ -1,6 +1,7 @@
 #include <iostream>
 #include <vector>
 #include <algorithm>
+#include <unistd.h>
 #include "utils/matrix.hpp"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -180,9 +181,25 @@ void process_fragment(const std::vector<Vertex>& in_vertices, size_t H, size_t W
     }
 }
 
-
 //---Rendering pipeline
 int main(int argc, char *argv[]) {
+    //---Parsing
+    double s = 1.0;
+    double t = 0.5*M_PI;
+    int c;
+    while ((c = getopt(argc, argv, "s:t:")) != -1) {
+        switch (c){
+        case 's':
+            s = atof(optarg);
+            break;
+        case 't':
+            t = atof(optarg)*M_PI/180.0;
+            break;
+        default:
+            abort();
+        }
+    }
+
     //---Scene description
     //-Meshes: two plan, one lying done, the other vertically back to the camera
     std::vector<Vertex> plan {{Vec4({-1.0, 0.0, -1.0, 1.0}), Vec3({1.0, 0.0, 0.0}), Vec2({0.0, 0.0})},
@@ -192,9 +209,9 @@ int main(int argc, char *argv[]) {
                               {Vec4({-1.0, 0.0, -1.0, 1.0}), Vec3({0.0, 0.0, 1.0}), Vec2({0.0, 0.0})},
                               {Vec4({1.0, 0.0, 1.0, 1.0}), Vec3({0.0, 0.0, 1.0}), Vec2({1.0, 1.0})},
                               {Vec4({1.0, 0.0, -1.0, 1.0}), Vec3({1.0, 0.0, 0.0}), Vec2({0.0, 1.0})}};
-    double scale = 1.0; //1.0 no clipping VS 10.0 clipping
+    double scale = s; //1.0 no clipping VS 10.0 clipping
     Mat4 model_mat = translation_matrix(Vec3({scale, 0.0, 0.0})) * rotation_matrix(Vec3({0.0, 0.0, 1.0}), 0.0) * scale_matrix(scale);
-    Mat4 model_mat_ = translation_matrix(Vec3({scale, 0.0, scale})) * rotation_matrix(Vec3({0.0, 0.0, 1.0}), 0.5*M_PI) * scale_matrix(scale);
+    Mat4 model_mat_ = translation_matrix(Vec3({scale, 0.0, scale})) * rotation_matrix(Vec3({0.0, 0.0, 1.0}), t) * scale_matrix(scale);
     unsigned int num_squares = 10; //Number of squares along one dimension of the checkerboard
     //-Camera
     Mat4 view_mat = look_at_matrix(Vec3({-1.0, 2.0, 0.0}), Vec3({scale, 0.0, 0.0}), Vec3({0.0, 1.0, 0.0}));
@@ -212,7 +229,7 @@ int main(int argc, char *argv[]) {
     process_vertices(plan, model_mat_, view_mat, proj_mat, buffer_B);
     //---Vertex post-processing (back face culling and clipping)
     post_process_vertices(buffer_B, H, W, buffer_A);
-    //---Resterization
+    //---Rasterization
     rasterization(buffer_A, H, W, buffer_B);
     //---Fragment shader
     fragment_shader(buffer_B, num_squares);
