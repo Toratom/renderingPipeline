@@ -1,7 +1,10 @@
 #include <iostream>
 #include <vector>
 #include <algorithm>
-#include "math/matrix.hpp"
+#include "utils/matrix.hpp"
+
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "utils/stb_image_write.h"
 
 struct Vertex {
     Vec4 pos;
@@ -110,8 +113,8 @@ void rasterization(const std::vector<Vertex>& in_vertices, size_t H, size_t W,
         Vec2 max_corner({std::max({floor(triangle[0].pos(0)), floor(triangle[1].pos(0)), floor(triangle[2].pos(0))}),
                          std::max({floor(triangle[0].pos(1)), floor(triangle[1].pos(1)), floor(triangle[2].pos(1))})});
         //Test for every pixel in AABB if belongs to the triangle (clip to the window, in theory no need thanks to clip)
-        for (size_t x = std::max(size_t(min_corner(0)), (size_t)0); x <= std::min(size_t(max_corner(0)), W); x += 1) {
-            for (size_t y = std::max(size_t(min_corner(1)), (size_t)0); y <= std::min(size_t(max_corner(1)), H); y += 1) {
+        for (size_t x = size_t(std::max(min_corner(0), 0.0)); x <= size_t(std::min(max_corner(0), 1.0*W)); x += 1) {
+            for (size_t y = size_t(std::max(min_corner(1), 0.0)); y <= size_t(std::min(max_corner(1), 1.0*H)); y += 1) {
                 Vec2 pixel({(double)x, (double)y});
                 pixel(0) += 0.5;
                 pixel(1) += 0.5;
@@ -143,6 +146,9 @@ void rasterization(const std::vector<Vertex>& in_vertices, size_t H, size_t W,
                 fragment.uv = (weights(0)*triangle[0].pos(3)*triangle[0].uv
                              + weights(1)*triangle[1].pos(3)*triangle[1].uv
                              + weights(2)*triangle[2].pos(3)*triangle[2].uv)/fragment_w;
+                // fragment.uv = (weights(0)*triangle[0].uv
+                //              + weights(1)*triangle[1].uv
+                //              + weights(2)*triangle[2].uv);
                 out_vertices.push_back(fragment);
             }
         }
@@ -158,31 +164,49 @@ void fragment_shader(std::vector<Vertex>& in_vertices, unsigned int num_squares)
     }
 }
 
+//-Sample processing (writing fragment to image buffer)
+void process_fragment(const std::vector<Vertex>& in_vertices, size_t H, size_t W,
+                      uint8_t image_buffer[]) {
+    std::vector<double> depth_buffer(H*W, 1.0);
+    for (const Vertex& fragment : in_vertices) {
+        size_t fragment_idx = W*int(fragment.pos(1)) + int(fragment.pos(0));
+        double fragment_z = fragment.pos(2);
+        if (fragment_z < depth_buffer[fragment_idx]) {
+            depth_buffer[fragment_idx] = fragment_z;
+            image_buffer[3*fragment_idx] = int(255.99 * fragment.color(0)); //Red
+            image_buffer[3*fragment_idx + 1] = int(255.99 * fragment.color(1)); //Green
+            image_buffer[3*fragment_idx + 2] = int(255.99 * fragment.color(2)); //Blue
+        }
+    }
+}
+
 
 //---Rendering pipeline
 int main(int argc, char *argv[]) {
     //---Scene description
-    //-Camera
-    Mat4 view_mat = look_at_matrix(Vec3({-1.0, 1.0, 0.0}), Vec3({2.0, 0.0, 0.0}), Vec3({0.0, 1.0, 0.0}));
-    Mat4 proj_mat = projection_matrix(-1.0, 1.0, -1.0, 1.0, 1.0, 100.0);
     //-Meshes: two plan, one lying done, the other vertically back to the camera
     std::vector<Vertex> plan {{Vec4({-1.0, 0.0, -1.0, 1.0}), Vec3({1.0, 0.0, 0.0}), Vec2({0.0, 0.0})},
-                              {Vec4({-1.0, 0.0, 1.0, 1.0}), Vec3({1.0, 0.0, 0.0}), Vec2({1.0, 0.0})},
-                              {Vec4({1.0, 0.0, 1.0, 1.0}), Vec3({0.0, 0.0, 1.0}), Vec2({1.0, 1.0})},
+                              {Vec4({-1.0, 0.0, 1.0, 1.0}), Vec3({0.0, 0.0, 1.0}), Vec2({1.0, 0.0})},
+                              {Vec4({1.0, 0.0, 1.0, 1.0}), Vec3({1.0, 0.0, 0.0}), Vec2({1.0, 1.0})},
 
-                              {Vec4({-1.0, 0.0, -1.0, 1.0}), Vec3({1.0, 0.0, 0.0}), Vec2({0.0, 0.0})},
+                              {Vec4({-1.0, 0.0, -1.0, 1.0}), Vec3({0.0, 0.0, 1.0}), Vec2({0.0, 0.0})},
                               {Vec4({1.0, 0.0, 1.0, 1.0}), Vec3({0.0, 0.0, 1.0}), Vec2({1.0, 1.0})},
-                              {Vec4({1.0, 0.0, -1.0, 1.0}), Vec3({0.0, 0.0, 1.0}), Vec2({0.0, 1.0})}};
+                              {Vec4({1.0, 0.0, -1.0, 1.0}), Vec3({1.0, 0.0, 0.0}), Vec2({0.0, 1.0})}};
     double scale = 1.0; //1.0 no clipping VS 10.0 clipping
-    Mat4 model_mat = translation_matrix(Vec3({0.5*scale + 1.0, 0.0, 0.0})) * rotation_matrix(Vec3({0.0, 0.0, 1.0}), 0.0) * scale_matrix(scale);
-    Mat4 model_mat_ = translation_matrix(Vec3({0.5*scale + 1.0, 0.0, 0.5*scale})) * rotation_matrix(Vec3({0.0, 0.0, 1.0}), -0.5*M_PI) * scale_matrix(scale);
+    Mat4 model_mat = translation_matrix(Vec3({scale, 0.0, 0.0})) * rotation_matrix(Vec3({0.0, 0.0, 1.0}), 0.0) * scale_matrix(scale);
+    Mat4 model_mat_ = translation_matrix(Vec3({scale, 0.0, scale})) * rotation_matrix(Vec3({0.0, 0.0, 1.0}), 0.5*M_PI) * scale_matrix(scale);
     unsigned int num_squares = 10; //Number of squares along one dimension of the checkerboard
+    //-Camera
+    Mat4 view_mat = look_at_matrix(Vec3({-1.0, 2.0, 0.0}), Vec3({scale, 0.0, 0.0}), Vec3({0.0, 1.0, 0.0}));
+    Mat4 proj_mat = projection_matrix(-1.0, 1.0, -1.0, 1.0, 1.0, 100.0);
     //-Window
-    size_t H = 100;
-    size_t W = 100;
+    const size_t H = 1000;
+    const size_t W = 1000;
 
     std::vector<Vertex> buffer_A;
     std::vector<Vertex> buffer_B;
+    uint8_t image_buffer[H*W*3];
+    std::fill_n(image_buffer, H*W* 3, 255);
     //---Vertex processing (from model space to clip space)
     process_vertices(plan, model_mat, view_mat, proj_mat, buffer_B);
     process_vertices(plan, model_mat_, view_mat, proj_mat, buffer_B);
@@ -193,10 +217,7 @@ int main(int argc, char *argv[]) {
     //---Fragment shader
     fragment_shader(buffer_B, num_squares);
     //---Sample processing (writing fragment to image buffer)
-
-    for (const Vertex& frag : buffer_B) {
-        std::cout << frag.color << std::endl;
-    }
-    std::cout << buffer_B.size() << std::endl;
-    
+    process_fragment(buffer_B, H, W, image_buffer);
+    stbi_flip_vertically_on_write(1);
+    stbi_write_jpg("img.jpg", W, H, 3, image_buffer, 100);
 }
