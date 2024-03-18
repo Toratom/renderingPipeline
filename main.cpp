@@ -90,7 +90,7 @@ void post_process_vertices(const std::vector<Vertex>& in_vertices, size_t H, siz
         }
 
         //-Convert polygon to triangles fan
-        for (size_t idx = 1; idx < subject_polygon.size() - 1; idx += 1) {
+        for (size_t idx = 1; subject_polygon.size() > 0 && idx < subject_polygon.size() - 1; idx += 1) {
             out_vertices.push_back(subject_polygon[0]);
             out_vertices.push_back(subject_polygon[idx]);
             out_vertices.push_back(subject_polygon[idx+1]);
@@ -215,7 +215,7 @@ int main(int argc, char *argv[]) {
     unsigned int num_squares = 10; //Number of squares along one dimension of the checkerboard
     //-Camera
     Mat4 view_mat = look_at_matrix(Vec3({-1.0, 2.0, 0.0}), Vec3({scale, 0.0, 0.0}), Vec3({0.0, 1.0, 0.0}));
-    Mat4 proj_mat = projection_matrix(-1.0, 1.0, -1.0, 1.0, 1.0, 100.0);
+    Mat4 proj_mat = projection_matrix(-1.0, 1.0, -1.0, 1.0, 1.0, 500.0);
     //-Window
     const size_t H = 1000;
     const size_t W = 1000;
@@ -235,6 +235,9 @@ int main(int argc, char *argv[]) {
     fragment_shader(buffer_B, num_squares);
     //---Sample processing (writing fragment to image buffer)
     process_fragment(buffer_B, H, W, image_buffer);
+
+    //Save image
+    std::string file_name = "img/img_t_" + std::to_string(int(180.0*t/M_PI)) + "_s_" + std::to_string(int(s)) + ".jpg"; 
     stbi_flip_vertically_on_write(1);
-    stbi_write_jpg("img.jpg", W, H, 3, image_buffer, 100);
+    stbi_write_jpg(file_name.c_str(), W, H, 3, image_buffer, 100);
 }
