@@ -147,6 +147,9 @@ void rasterization(const std::vector<Vertex>& in_vertices, size_t H, size_t W,
                 fragment.uv = (weights(0)*triangle[0].pos(3)*triangle[0].uv
                              + weights(1)*triangle[1].pos(3)*triangle[1].uv
                              + weights(2)*triangle[2].pos(3)*triangle[2].uv)/fragment_w;
+                // fragment.color = (weights(0)*triangle[0].color
+                //                 + weights(1)*triangle[1].color
+                //                 + weights(2)*triangle[2].color);
                 // fragment.uv = (weights(0)*triangle[0].uv
                 //              + weights(1)*triangle[1].uv
                 //              + weights(2)*triangle[2].uv);
